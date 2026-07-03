@@ -1,0 +1,11 @@
+{
+  "model_version": "adult-income-rf-v1.0",
+  "algorithm": "RandomForestClassifier",
+  "dataset": "UCI Adult Dataset",
+  "trained_at": "2026-07-03",
+  "target": "income",
+  "classes": [
+    "<=50K",
+    ">50K"
+  ]
+}
