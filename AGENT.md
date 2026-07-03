@@ -4,6 +4,7 @@
 
 - `README.md`
 - `docs/Adult_Census_Vercel_SPEC_v1_0.md`
+- `docs/RWD_Sidebar_REQUIREMENT_v1_0.md`
 
 ---
 
@@ -40,6 +41,34 @@ Next.js Frontend
 - 不要移除 fairness / bias notice。
 - 不要把模型預測說成真實收入判斷。
 - 不要把此專案宣稱可用於聘僱、貸款、保險等高風險決策。
+- 子分頁手機版不得固定顯示左側 Sidebar；小於 `lg` 時必須隱藏 Sidebar。
+- 子分頁必須使用共用 RWD Layout / AppShell，不要每個頁面各自重複寫 Sidebar。
+
+---
+
+## RWD / Sidebar 規則
+
+所有子分頁需遵守：
+
+```txt
+Desktop lg 以上：顯示左側 Sidebar
+Mobile / Tablet 小於 lg：隱藏左側 Sidebar
+Mobile：顯示 MobileHeader + Drawer / Sheet 導航
+Main content：手機版必須 w-full，不可被 Sidebar 擠壓
+```
+
+建議元件：
+
+```txt
+components/layout/AppShell.tsx
+components/layout/Sidebar.tsx
+components/layout/MobileHeader.tsx
+components/layout/MobileDrawer.tsx
+```
+
+參考文件：
+
+- `docs/RWD_Sidebar_REQUIREMENT_v1_0.md`
 
 ---
 
@@ -54,7 +83,7 @@ Next.js Frontend
 
 ### Token Guard
 
-- 開發前先讀：`README.md` 與 `docs/Adult_Census_Vercel_SPEC_v1_0.md`。
+- 開發前先讀：`README.md`、`docs/Adult_Census_Vercel_SPEC_v1_0.md` 與 `docs/RWD_Sidebar_REQUIREMENT_v1_0.md`。
 - 不要重複讀取整個 repo；優先針對相關檔案修改。
 - 回報時只列重點：改了什麼、如何測試、是否有風險。
 
@@ -92,6 +121,16 @@ python scripts/train_adult_model.py
 ```txt
 models/adult_income_pipeline.joblib
 models/model_meta.json
+```
+
+RWD 需確認：
+
+```txt
+/predict、/dashboard、/about 在小於 lg 的螢幕寬度下：
+- Sidebar 隱藏
+- 主內容 w-full
+- MobileHeader 顯示
+- 可透過 Drawer / Sheet 開啟導航
 ```
 
 ---
