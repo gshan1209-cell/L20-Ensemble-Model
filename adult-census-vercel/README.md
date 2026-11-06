@@ -10,7 +10,7 @@ A full-stack machine learning web application that classifies income levels (`<=
 
 | Module           | Technology                        |
 | ---------------- | --------------------------------- |
-| Frontend         | Next.js 14 App Router             |
+| Frontend         | Next.js 16.4.5 App Router / React 19.2.9 |
 | UI               | Tailwind CSS                      |
 | API              | Next.js Route Handlers + Python   |
 | ML Inference     | Python + scikit-learn             |
@@ -58,7 +58,7 @@ adult-census-vercel/
 
 ### Prerequisites
 
-- Node.js >= 18
+- Node.js >= 20.9 (verified locally with Node 24.16.0)
 - Python >= 3.9
 - Postgres (optional, for model metadata and historical prediction records)
 
@@ -66,7 +66,7 @@ adult-census-vercel/
 
 ```bash
 # Install Node dependencies
-npm install
+npm ci
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -178,10 +178,19 @@ npm ci
 npx prisma generate
 npm test
 npm run lint
+npm run typecheck
 npm run build
 ```
 
 Tests use synthetic input, controlled model-presence/Python boundary fixtures, the real Next.js route and server-rendered result card. They do not require a database, ML dependencies, training, or a production service. A successful fixture is not verification of the deployed Python model. The direct Python endpoint currently omits source metadata and is displayed as unverified; production routing and model availability require separate verification.
+
+## Supported dependency candidate
+
+The app pins Next.js 16.4.5, React/ReactDOM 19.2.9, PostCSS 8.5.23, Zod 4.6.7, ESLint 9.39.5, and TypeScript 5.9.3. Development and builds explicitly use webpack to retain the existing bundler. The Next.js config fixes file tracing to this app directory. Next.js 16 no longer runs lint during build, so run lint and typecheck separately.
+
+The repository root is a command launcher with no second Next.js installation. Run `npm run install:app` there to install this app's lockfile; root `build`, `dev`, `start`, `lint`, `typecheck`, and `test` forward here. Hosting must still select `adult-census-vercel` as its application root and install its lockfile. No deployment settings are changed by this candidate.
+
+Next.js 14.2.35 only addressed historical fixes; the supported Next.js 16 line also addresses later advisories. Zod was upgraded after an online production dependency audit identified GHSA-mrhx-c7xc-m3w5. Do not infer safety of bundled code from a top-level version or an audit count alone. Vendored loaders, development-only findings, and production reachability need separate assessment. No arbitrary dependency overrides or peer-dependency bypasses are used.
 
 ## License
 

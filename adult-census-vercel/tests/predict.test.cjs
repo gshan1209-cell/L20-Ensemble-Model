@@ -16,8 +16,8 @@ function loadTs(relativePath, overrides = {}, output = []) {
   const cache = new Map();
   function load(filename) {
     if (cache.has(filename)) return cache.get(filename).exports;
-    const module = { exports: {} };
-    cache.set(filename, module);
+    const loadedModule = { exports: {} };
+    cache.set(filename, loadedModule);
     const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -45,10 +45,10 @@ function loadTs(relativePath, overrides = {}, output = []) {
     );
     vm.runInNewContext(
       compiled,
-      { require: localRequire, module, exports: module.exports, process, console: logger },
+      { require: localRequire, module: loadedModule, exports: loadedModule.exports, process, console: logger },
       { filename }
     );
-    return module.exports;
+    return loadedModule.exports;
   }
   return load(path.join(root, relativePath));
 }
