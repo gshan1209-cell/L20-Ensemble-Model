@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { predictionInputSchema } from "@/lib/validation";
-import { prisma } from "@/lib/db";
-import type { Prisma } from "@prisma/client";
+import type { PredictionResult } from "@/lib/constants";
 import { execSync } from "child_process";
 import path from "path";
 import fs from "fs";
@@ -23,16 +22,17 @@ export async function POST(request: Request) {
     let probability: number;
     let classProbabilities: Record<string, number>;
     let modelVersion = process.env.MODEL_VERSION || "adult-income-rf-v1.0";
+    let predictionSource: PredictionResult["prediction_source"] = "model";
+    let fallbackReason: PredictionResult["fallback_reason"];
 
     const modelPath = path.join(process.cwd(), "models", "adult_income_pipeline.joblib");
 
     if (fs.existsSync(modelPath)) {
       try {
-        const pythonScript = path.join(process.cwd(), "api", "predict.py");
         const inputJson = JSON.stringify(input);
         const result = execSync(
           `python -c "import sys; sys.path.insert(0, '${path.join(process.cwd(), "api")}'); from predict import handler; import json; print(json.dumps(handler(json.loads('${inputJson.replace(/'/g, "\\'")}'))))"`,
-          { cwd: process.cwd(), timeout: 30000 }
+          { cwd: process.cwd(), timeout: 30000, stdio: "pipe" }
         );
         const parsed = JSON.parse(result.toString().trim());
         if (parsed.statusCode === 200) {
@@ -44,20 +44,25 @@ export async function POST(request: Request) {
         } else {
           throw new Error(JSON.parse(parsed.body)?.error || "Model inference failed");
         }
-      } catch (pyErr) {
-        console.warn("Python inference failed, using fallback:", pyErr);
+      } catch {
+        // Child-process errors can contain the request in the command string.
+        console.warn("Python inference failed; using educational heuristic.");
         const fallback = generateFallbackPrediction(input);
         prediction = fallback.prediction;
         probability = fallback.probability;
         classProbabilities = fallback.classProbabilities;
-        modelVersion = modelVersion + "-fallback";
+        modelVersion = "educational-heuristic-v1";
+        predictionSource = "heuristic";
+        fallbackReason = "python_inference_failed";
       }
     } else {
       const fallback = generateFallbackPrediction(input);
       prediction = fallback.prediction;
       probability = fallback.probability;
       classProbabilities = fallback.classProbabilities;
-      modelVersion = modelVersion + "-fallback";
+      modelVersion = "educational-heuristic-v1";
+      predictionSource = "heuristic";
+      fallbackReason = "model_missing";
     }
 
     const result = {
@@ -65,28 +70,18 @@ export async function POST(request: Request) {
       probability,
       class_probabilities: classProbabilities,
       model_version: modelVersion,
+      prediction_source: predictionSource,
+      fallback_reason: fallbackReason,
+      notice: predictionSource === "heuristic"
+        ? "Educational heuristic only; these weights are not model probabilities. Do not use for employment, eligibility, lending, or other real-world decisions."
+        : "Educational demonstration only. Do not use for employment, eligibility, lending, or other real-world decisions.",
       created_at: new Date().toISOString(),
     };
 
-    if (process.env.ENABLE_PREDICTION_LOGS === "true") {
-      try {
-        await prisma.predictionLog.create({
-          data: {
-            input_json: input as Prisma.InputJsonValue,
-            predicted_label: prediction,
-            probability,
-            class_probabilities: classProbabilities as Prisma.InputJsonValue,
-            model_version: modelVersion,
-          },
-        });
-      } catch (dbErr) {
-        console.warn("Failed to log prediction:", dbErr);
-      }
-    }
-
+    // Prediction requests and results are intentionally not persisted.
     return NextResponse.json(result, { status: 200 });
-  } catch (err) {
-    console.error("Prediction error:", err);
+  } catch {
+    console.error("Prediction request failed.");
     return NextResponse.json(
       { error: "Prediction service is temporarily unavailable" },
       { status: 500 }
@@ -106,6 +101,7 @@ function generateFallbackPrediction(input: Record<string, unknown>) {
   if (hoursPerWeek > 40) score += 1;
   if (capitalGain > 5000) score += 2;
 
+  // A teaching weight for >50K, not a calibrated model probability.
   const probability = Math.min(0.95, Math.max(0.05, 0.2 + score * 0.15));
   const isOver50k = probability > 0.5;
 
@@ -113,8 +109,8 @@ function generateFallbackPrediction(input: Record<string, unknown>) {
     prediction: isOver50k ? ">50K" : "<=50K",
     probability: isOver50k ? probability : 1 - probability,
     classProbabilities: {
-      "<=50K": isOver50k ? 1 - probability : probability,
-      ">50K": isOver50k ? probability : 1 - probability,
+      "<=50K": 1 - probability,
+      ">50K": probability,
     },
   };
 }

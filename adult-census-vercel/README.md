@@ -60,7 +60,7 @@ adult-census-vercel/
 
 - Node.js >= 18
 - Python >= 3.9
-- Postgres (optional, for prediction logging)
+- Postgres (optional, for model metadata and historical prediction records)
 
 ### Setup
 
@@ -135,7 +135,7 @@ npx prisma db push
 ```
 
 Tables:
-- `prediction_logs` - stores each prediction request
+- `prediction_logs` - historical prediction records (the prediction API no longer writes new requests/results)
 - `model_versions` - tracks model versions
 - `daily_prediction_stats` - aggregated daily stats (optional)
 
@@ -157,13 +157,31 @@ npm run build
 | ---------------------------- | ------------------------------------ |
 | `DATABASE_URL`               | Postgres connection string           |
 | `MODEL_VERSION`              | Model version identifier             |
-| `ENABLE_PREDICTION_LOGS`     | Enable prediction logging (`true`)   |
+| `ENABLE_PREDICTION_LOGS`     | Legacy flag; prediction requests/results are no longer persisted, even when `true` |
 | `NEXT_PUBLIC_SUPABASE_URL`   | Supabase URL (if using Supabase)     |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key                 |
 
 ## Fairness Notice
 
 This model is for **educational and portfolio purposes only**. It should NOT be used for real-world salary, hiring, lending, insurance, or any high-stakes decisions. The dataset contains demographic features (race, sex, native-country) that may reflect historical social biases.
+
+## Prediction source and local checks
+
+The Next.js `POST /api/predict` returns `prediction_source: "model"` only when Python inference succeeds. If the model file is missing or Python inference fails, it returns `prediction_source: "heuristic"`, a `fallback_reason` (`model_missing` or `python_inference_failed`), and a teaching-only notice. The fallback uses fixed rules; its normalized class weights and `probability` field (the selected class weight, retained for API compatibility) are **not calibrated model probabilities**. A score exactly at 0.5 selects `<=50K`.
+
+The result card distinguishes model, heuristic, and older responses without source metadata. Neither source may be used for employment, eligibility, lending, or other real-world decisions. Prediction requests/results are not written to the database; the dashboard can still read previously stored records. Inference errors are logged without request contents.
+
+Run these commands from `adult-census-vercel/` (not the repository root):
+
+```bash
+npm ci
+npx prisma generate
+npm test
+npm run lint
+npm run build
+```
+
+Tests use synthetic input, controlled model-presence/Python boundary fixtures, the real Next.js route and server-rendered result card. They do not require a database, ML dependencies, training, or a production service. A successful fixture is not verification of the deployed Python model. The direct Python endpoint currently omits source metadata and is displayed as unverified; production routing and model availability require separate verification.
 
 ## License
 
