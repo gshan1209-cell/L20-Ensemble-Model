@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { predictionInputSchema } from "@/lib/validation";
+import { PredictionRequestError, readPredictionRequest } from "@/lib/prediction-request";
 import type { PredictionResult } from "@/lib/constants";
 import { execSync } from "child_process";
 import path from "path";
@@ -7,7 +8,7 @@ import fs from "fs";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await readPredictionRequest(request);
     const parsed = predictionInputSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -80,7 +81,10 @@ export async function POST(request: Request) {
 
     // Prediction requests and results are intentionally not persisted.
     return NextResponse.json(result, { status: 200 });
-  } catch {
+  } catch (error) {
+    if (error instanceof PredictionRequestError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Prediction request failed.");
     return NextResponse.json(
       { error: "Prediction service is temporarily unavailable" },

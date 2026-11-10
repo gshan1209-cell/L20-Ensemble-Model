@@ -216,13 +216,84 @@ test("invalid input still returns 422 instead of a fallback prediction", async (
   assert.equal(status, 422);
   assert.equal(body.prediction, undefined);
 });
-test("malformed request still returns a generic error", async () => {
+test("malformed JSON returns a generic client error", async () => {
   const harness = setup();
   const response = await harness.route.POST(new Request("http://localhost/api/predict", {
     method: "POST", body: "invalid JSON", headers: { "Content-Type": "application/json" },
   }));
-  assert.equal(response.status, 500);
-  assert.deepEqual(await response.json(), { error: "Prediction service is temporarily unavailable" });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "Invalid JSON request" });
+});
+for (const [name, headers] of [
+  ["text", { "Content-Type": "text/plain" }],
+  ["form", { "Content-Type": "application/x-www-form-urlencoded" }],
+  ["multipart", { "Content-Type": "multipart/form-data; boundary=synthetic" }],
+]) {
+  test(`prediction boundary rejects ${name} before inference`, async () => {
+    const response = await setup().route.POST(new Request("http://localhost/api/predict", {
+      method: "POST", headers, body: JSON.stringify(input),
+    }));
+    assert.equal(response.status, 415);
+    assert.deepEqual(await response.json(), { error: "Content-Type must be application/json" });
+  });
+}
+test("prediction boundary rejects oversized declared length without reading the body", async () => {
+  const request = new Request("http://localhost/api/predict", {
+    method: "POST", headers: { "Content-Type": "application/json", "Content-Length": "8193" },
+    body: JSON.stringify(input),
+  });
+  request.body.getReader = () => { throw new Error("body must not be read"); };
+  const response = await setup().route.POST(request);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "Prediction request exceeds 8192 bytes" });
+});
+test("prediction boundary caps chunked bytes and cancels the stream", async () => {
+  const text = JSON.stringify(input).padEnd(16384, " ");
+  let offset = 0;
+  let cancelled = false;
+  const stream = new ReadableStream({
+    pull(controller) {
+      if (offset === text.length) { controller.close(); return; }
+      controller.enqueue(new TextEncoder().encode(text.slice(offset, offset + 4096)));
+      offset += 4096;
+    },
+    cancel() { cancelled = true; },
+  });
+  const response = await setup().route.POST(new Request("http://localhost/api/predict", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: stream, duplex: "half",
+  }));
+  assert.equal(response.status, 413);
+  assert.equal(cancelled, true);
+});
+test("prediction boundary measures UTF-8 bytes rather than characters", async () => {
+  const body = JSON.stringify({ ...input, ignored: "漢".repeat(3000) });
+  assert.ok(body.length < 8192);
+  const response = await setup().route.POST(new Request("http://localhost/api/predict", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body,
+  }));
+  assert.equal(response.status, 413);
+});
+test("prediction boundary accepts exactly 8192 bytes and JSON charset", async () => {
+  const body = JSON.stringify(input).padEnd(8192, " ");
+  const response = await setup().route.POST(new Request("http://localhost/api/predict", {
+    method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body,
+  }));
+  assert.equal(response.status, 200);
+  consistent(await response.json());
+});
+test("empty JSON body returns a client error", async () => {
+  const response = await setup().route.POST(new Request("http://localhost/api/predict", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+  }));
+  assert.equal(response.status, 400);
+});
+test("invalid UTF-8 is rejected instead of silently replacing request bytes", async () => {
+  const prefix = new TextEncoder().encode(JSON.stringify({ ...input, ignored: "" }).slice(0, -2));
+  const body = Buffer.concat([prefix, Buffer.from([0xff]), Buffer.from('"}')]);
+  const response = await setup().route.POST(new Request("http://localhost/api/predict", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body,
+  }));
+  assert.equal(response.status, 400);
 });
 const Card = loadTs("components/PredictionResultCard.tsx").default;
 function render(result) {
