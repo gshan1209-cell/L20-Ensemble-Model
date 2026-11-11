@@ -67,7 +67,7 @@ function setup({ modelExists = false, python } = {}) {
   const route = loadTs("app/api/predict/route.ts", {
     fs: { ...fs, existsSync: () => modelExists },
     child_process: {
-      execSync: python || (() => { throw new Error("unexpected Python invocation"); }),
+      execFileSync: python || (() => { throw new Error("unexpected Python invocation"); }),
     },
     "@/lib/db": { prisma: { predictionLog: { create: async (data) => writes.push(data) } } },
   }, output);
@@ -158,6 +158,28 @@ const modelResult = {
 function pythonSuccess() {
   return Buffer.from(JSON.stringify({ statusCode: 200, body: JSON.stringify(modelResult) }));
 }
+test("real-model transport passes validated JSON over stdin without shell interpolation", async () => {
+  const invocations = [];
+  const transport = (binary, args, options) => {
+    invocations.push({ binary, args, options });
+    return pythonSuccess();
+  };
+  const { status, body } = await setup({ modelExists: true, python: transport }).post();
+  assert.equal(status, 200);
+  assert.equal(body.prediction_source, "model");
+  assert.equal(invocations.length, 1);
+  const { binary, args, options } = invocations[0];
+  assert.equal(binary, "python");
+  assert.equal(args[0], "-c");
+  assert.match(args[1], /json\.load\(sys\.stdin\)/);
+  assert.doesNotMatch(args[1], /Private|United-States/);
+  assert.equal(args[2], path.join(process.cwd(), "api"));
+  assert.deepEqual(JSON.parse(options.input), input);
+  assert.deepEqual(options.stdio, ["pipe", "pipe", "pipe"]);
+  assert.equal(options.shell, undefined);
+  assert.equal(options.timeout, 30000);
+});
+
 test("successful Python response is labelled model and preserves its probabilities", async () => {
   const { status, body } = await setup({ modelExists: true, python: pythonSuccess }).post();
   assert.equal(status, 200);
@@ -187,17 +209,17 @@ test("Python exceptions cannot echo private input to application logs", async ()
   assert.doesNotMatch(harness.output.map((args) => format(...args)).join("\n"), /SYNTHETIC_PRIVATE_INPUT/);
 });
 test("failing inference subprocess cannot echo stderr to server logs", async () => {
-  // Use a real child process to catch execSync's implicit stderr forwarding
+  // Use a real child process to catch accidental stderr forwarding
   // when stdio is omitted. No Python/ML installation or real input is needed.
-  const { execSync } = require("node:child_process");
+  const { execFileSync } = require("node:child_process");
   const originalWrite = process.stderr.write;
   let stderr = "";
   let subprocessStatus;
   process.stderr.write = (chunk) => { stderr += chunk.toString(); return true; };
   try {
-    const harness = setup({ modelExists: true, python: (_command, options) => {
+    const harness = setup({ modelExists: true, python: (_file, _args, options) => {
       try {
-        return execSync('node -e "process.stderr.write(\'SYNTHETIC_PRIVATE_INPUT\');process.exit(7)"', options);
+        return execFileSync(process.execPath, ["-e", "process.stderr.write('SYNTHETIC_PRIVATE_INPUT');process.exit(7)"], options);
       } catch (error) {
         subprocessStatus = error.status;
         throw error;
