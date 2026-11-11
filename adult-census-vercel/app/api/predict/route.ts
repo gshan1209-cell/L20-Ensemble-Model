@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { predictionInputSchema } from "@/lib/validation";
 import { PredictionRequestError, readPredictionRequest } from "@/lib/prediction-request";
 import type { PredictionResult } from "@/lib/constants";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import path from "path";
 import fs from "fs";
 
@@ -30,10 +30,22 @@ export async function POST(request: Request) {
 
     if (fs.existsSync(modelPath)) {
       try {
-        const inputJson = JSON.stringify(input);
-        const result = execSync(
-          `python -c "import sys; sys.path.insert(0, '${path.join(process.cwd(), "api")}'); from predict import handler; import json; print(json.dumps(handler(json.loads('${inputJson.replace(/'/g, "\\'")}'))))"`,
-          { cwd: process.cwd(), timeout: 30000, stdio: "pipe" }
+        // Pass JSON via stdin and script arguments directly: shell interpolation
+        // breaks JSON quoting and could expose user input in process arguments.
+        const result = execFileSync(
+          "python",
+          [
+            "-c",
+            "import sys, json; sys.path.insert(0, sys.argv[1]); from predict import handler; print(json.dumps(handler(json.load(sys.stdin))))",
+            path.join(process.cwd(), "api"),
+          ],
+          {
+            cwd: process.cwd(),
+            timeout: 30000,
+            input: JSON.stringify(input),
+            stdio: ["pipe", "pipe", "pipe"],
+            maxBuffer: 1024 * 1024,
+          }
         );
         const parsed = JSON.parse(result.toString().trim());
         if (parsed.statusCode === 200) {
