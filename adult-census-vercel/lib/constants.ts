@@ -175,6 +175,10 @@ export interface PredictionResult {
   probability: number;
   class_probabilities: Record<string, number>;
   model_version: string;
+  // Older/direct Python responses may omit provenance; the UI must say unknown.
+  prediction_source?: "model" | "heuristic";
+  fallback_reason?: "model_missing" | "python_inference_failed";
+  notice?: string;
   created_at: string;
 }
 

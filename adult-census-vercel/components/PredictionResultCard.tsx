@@ -34,6 +34,8 @@ export default function PredictionResultCard({ result, loading, error }: Props) 
   }
 
   const isOver50k = result.prediction === ">50K";
+  const isHeuristic = result.prediction_source === "heuristic";
+  const isModel = result.prediction_source === "model";
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -42,7 +44,9 @@ export default function PredictionResultCard({ result, loading, error }: Props) 
           isOver50k ? "bg-emerald-50 border-b border-emerald-200" : "bg-blue-50 border-b border-blue-200"
         }`}
       >
-        <p className="text-sm text-slate-500 mb-1">Prediction</p>
+        <p className="text-sm text-slate-500 mb-1">
+          {isHeuristic ? "Educational heuristic" : isModel ? "Trained model prediction" : "Result source unavailable"}
+        </p>
         <p
           className={`text-3xl font-bold ${
             isOver50k ? "text-emerald-700" : "text-blue-700"
@@ -52,8 +56,15 @@ export default function PredictionResultCard({ result, loading, error }: Props) 
         </p>
       </div>
       <div className="p-6 space-y-3">
+        {isHeuristic && (
+          <p role="note" className="text-sm text-amber-900 bg-amber-50 rounded p-3">
+            Rule-based teaching approximation; these weights are not model probabilities.
+          </p>
+        )}
         <div>
-          <p className="text-sm text-slate-500">Confidence</p>
+          <p className="text-sm text-slate-500">
+            {isHeuristic ? "Heuristic score" : isModel ? "Model confidence" : "Reported value (source unverified)"}
+          </p>
           <div className="flex items-center gap-3 mt-1">
             <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
               <div
@@ -68,6 +79,9 @@ export default function PredictionResultCard({ result, loading, error }: Props) 
             </span>
           </div>
         </div>
+        <p className="text-sm text-slate-500">
+          {isHeuristic ? "Heuristic class weights" : isModel ? "Class probabilities" : "Reported class values"}
+        </p>
         <div className="grid grid-cols-2 gap-2 text-sm">
           {Object.entries(result.class_probabilities).map(([cls, prob]) => (
             <div key={cls} className="flex justify-between">
@@ -79,8 +93,12 @@ export default function PredictionResultCard({ result, loading, error }: Props) 
           ))}
         </div>
         <div className="pt-3 border-t border-slate-100 text-xs text-slate-400">
-          Model: {result.model_version}
+          {isModel ? "Model" : "Method"}: {result.model_version}
         </div>
+        <p role="note" className="text-xs text-slate-500">
+          Educational demonstration only. Do not use for employment, eligibility, lending,
+          or other real-world decisions.
+        </p>
       </div>
     </div>
   );

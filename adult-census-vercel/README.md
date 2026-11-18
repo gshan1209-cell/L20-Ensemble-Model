@@ -10,7 +10,7 @@ A full-stack machine learning web application that classifies income levels (`<=
 
 | Module           | Technology                        |
 | ---------------- | --------------------------------- |
-| Frontend         | Next.js 14 App Router             |
+| Frontend         | Next.js 16.4.5 App Router / React 19.2.9 |
 | UI               | Tailwind CSS                      |
 | API              | Next.js Route Handlers + Python   |
 | ML Inference     | Python + scikit-learn             |
@@ -58,15 +58,15 @@ adult-census-vercel/
 
 ### Prerequisites
 
-- Node.js >= 18
+- Node.js >= 20.9 (verified locally with Node 24.16.0)
 - Python >= 3.9
-- Postgres (optional, for prediction logging)
+- Postgres (optional, for model metadata and historical prediction records)
 
 ### Setup
 
 ```bash
 # Install Node dependencies
-npm install
+npm ci
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -135,7 +135,7 @@ npx prisma db push
 ```
 
 Tables:
-- `prediction_logs` - stores each prediction request
+- `prediction_logs` - historical prediction records (the prediction API no longer writes new requests/results)
 - `model_versions` - tracks model versions
 - `daily_prediction_stats` - aggregated daily stats (optional)
 
@@ -157,13 +157,40 @@ npm run build
 | ---------------------------- | ------------------------------------ |
 | `DATABASE_URL`               | Postgres connection string           |
 | `MODEL_VERSION`              | Model version identifier             |
-| `ENABLE_PREDICTION_LOGS`     | Enable prediction logging (`true`)   |
+| `ENABLE_PREDICTION_LOGS`     | Legacy flag; prediction requests/results are no longer persisted, even when `true` |
 | `NEXT_PUBLIC_SUPABASE_URL`   | Supabase URL (if using Supabase)     |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key                 |
 
 ## Fairness Notice
 
 This model is for **educational and portfolio purposes only**. It should NOT be used for real-world salary, hiring, lending, insurance, or any high-stakes decisions. The dataset contains demographic features (race, sex, native-country) that may reflect historical social biases.
+
+## Prediction source and local checks
+
+The Next.js `POST /api/predict` returns `prediction_source: "model"` only when Python inference succeeds. If the model file is missing or Python inference fails, it returns `prediction_source: "heuristic"`, a `fallback_reason` (`model_missing` or `python_inference_failed`), and a teaching-only notice. The fallback uses fixed rules; its normalized class weights and `probability` field (the selected class weight, retained for API compatibility) are **not calibrated model probabilities**. A score exactly at 0.5 selects `<=50K`.
+
+The result card distinguishes model, heuristic, and older responses without source metadata. Neither source may be used for employment, eligibility, lending, or other real-world decisions. Prediction requests/results are not written to the database; the dashboard can still read previously stored records. Inference errors are logged without request contents.
+
+Run these commands from `adult-census-vercel/` (not the repository root):
+
+```bash
+npm ci
+npx prisma generate
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Tests use synthetic input, controlled model-presence/Python boundary fixtures, the real Next.js route and server-rendered result card. They do not require a database, ML dependencies, training, or a production service. A successful fixture is not verification of the deployed Python model. The direct Python endpoint currently omits source metadata and is displayed as unverified; production routing and model availability require separate verification.
+
+## Supported dependency candidate
+
+The app pins Next.js 16.4.5, React/ReactDOM 19.2.9, PostCSS 8.5.23, Zod 4.6.7, ESLint 9.39.5, and TypeScript 5.9.3. Development and builds explicitly use webpack to retain the existing bundler. The Next.js config fixes file tracing to this app directory. Next.js 16 no longer runs lint during build, so run lint and typecheck separately.
+
+The repository root is a command launcher with no second Next.js installation. Run `npm run install:app` there to install this app's lockfile; root `build`, `dev`, `start`, `lint`, `typecheck`, and `test` forward here. Hosting must still select `adult-census-vercel` as its application root and install its lockfile. No deployment settings are changed by this candidate.
+
+Next.js 14.2.35 only addressed historical fixes; the supported Next.js 16 line also addresses later advisories. Zod was upgraded after an online production dependency audit identified GHSA-mrhx-c7xc-m3w5. Do not infer safety of bundled code from a top-level version or an audit count alone. Vendored loaders, development-only findings, and production reachability need separate assessment. No arbitrary dependency overrides or peer-dependency bypasses are used.
 
 ## License
 

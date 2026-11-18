@@ -28,7 +28,12 @@ export default function PredictionLogsTable({ logs, total, loading }: Props) {
   return (
     <div>
       <p className="text-sm text-slate-500 mb-3">Total predictions: {total}</p>
-      <div className="overflow-x-auto">
+      <div
+        role="region"
+        aria-label="Prediction logs table"
+        tabIndex={0}
+        className="overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      >
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-slate-500">
