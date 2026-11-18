@@ -175,7 +175,7 @@ test("real-model transport passes validated JSON over stdin without shell interp
   assert.doesNotMatch(args[1], /Private|United-States/);
   assert.equal(args[2], path.join(process.cwd(), "api"));
   assert.deepEqual(JSON.parse(options.input), input);
-  assert.deepEqual(options.stdio, ["pipe", "pipe", "pipe"]);
+  assert.deepEqual(Array.from(options.stdio), ["pipe", "pipe", "pipe"]);
   assert.equal(options.shell, undefined);
   assert.equal(options.timeout, 30000);
 });
